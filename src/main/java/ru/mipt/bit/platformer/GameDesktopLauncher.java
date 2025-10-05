@@ -10,64 +10,73 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.maps.MapRenderer;
 import com.badlogic.gdx.maps.tiled.TiledMap;
-import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
+import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.math.GridPoint2;
 import com.badlogic.gdx.math.Interpolation;
-import com.badlogic.gdx.math.Rectangle;
+import ru.mipt.bit.platformer.input.GdxKeyQuery;
+import ru.mipt.bit.platformer.input.InputHandler;
+import ru.mipt.bit.platformer.util.*;
 import ru.mipt.bit.platformer.util.TileMovement;
+import ru.mipt.bit.platformer.view.TankView;
+import ru.mipt.bit.platformer.view.TreeView;
+
+import java.util.Optional;
 
 import static com.badlogic.gdx.Input.Keys.*;
 import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
-import static com.badlogic.gdx.math.MathUtils.isEqual;
-import static ru.mipt.bit.platformer.util.GdxGameUtils.*;
+import static ru.mipt.bit.platformer.util.GdxGameUtils.createSingleLayerMapRenderer;
+import static ru.mipt.bit.platformer.util.GdxGameUtils.getSingleLayer;
 
 public class GameDesktopLauncher implements ApplicationListener {
-
-    private static final float MOVEMENT_SPEED = 0.4f;
+    private static final float MOVE_SPEED_SECONDS = 0.4f;
 
     private Batch batch;
+    private TiledMap map;
+    private MapRenderer mapRenderer;
+    private TiledMapTileLayer groundLayer;
 
-    private TiledMap level;
-    private MapRenderer levelRenderer;
+    private WorldModel worldModel;
+    private TankModel tankModel;
+    private TreeModel treeModel;
+
+    private Texture tankTexture, treeTexture;
+    private TextureRegion tankRegion, treeRegion;
+    private TankView tankView;
+    private TreeView treeView;
     private TileMovement tileMovement;
 
-    private Texture blueTankTexture;
-    private TextureRegion playerGraphics;
-    private Rectangle playerRectangle;
-
-    private GridPoint2 playerCoordinates;
-    private GridPoint2 playerDestinationCoordinates;
-
-    private float playerMovementProgress = 1f;
-    private float playerRotation;
-
-    private Texture greenTreeTexture;
-    private TextureRegion treeObstacleGraphics;
-    private GridPoint2 treeObstacleCoordinates = new GridPoint2();
-    private Rectangle treeObstacleRectangle = new Rectangle();
+    private InputHandler input;
 
     @Override
     public void create() {
         batch = new SpriteBatch();
 
-        level = new TmxMapLoader().load("level.tmx");
-        levelRenderer = createSingleLayerMapRenderer(level, batch);
-        TiledMapTileLayer groundLayer = getSingleLayer(level);
+        map = new TmxMapLoader().load("level.tmx");
+        mapRenderer = createSingleLayerMapRenderer(map, batch);
+        groundLayer = getSingleLayer(map);
         tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
 
-        blueTankTexture = new Texture("images/tank_blue.png");
-        playerGraphics = new TextureRegion(blueTankTexture);
-        playerRectangle = createBoundingRectangle(playerGraphics);
-        playerDestinationCoordinates = new GridPoint2(1, 1);
-        playerCoordinates = new GridPoint2(playerDestinationCoordinates);
-        playerRotation = 0f;
+        worldModel = new WorldModel(groundLayer.getWidth(), groundLayer.getHeight());
 
-        greenTreeTexture = new Texture("images/greenTree.png");
-        treeObstacleGraphics = new TextureRegion(greenTreeTexture);
-        treeObstacleCoordinates = new GridPoint2(1, 3);
-        treeObstacleRectangle = createBoundingRectangle(treeObstacleGraphics);
-        moveRectangleAtTileCenter(groundLayer, treeObstacleRectangle, treeObstacleCoordinates);
+        tankModel = new TankModel(new GridPoint2(1, 1));
+        treeModel = new TreeModel(new GridPoint2(1, 3));
+        worldModel.addBlocking(treeModel.tile());
+
+        tankTexture = new Texture("images/tank_blue.png");
+        treeTexture = new Texture("images/greenTree.png");
+        tankRegion = new TextureRegion(tankTexture);
+        treeRegion = new TextureRegion(treeTexture);
+
+        tankView = new TankView(tankModel, tankRegion, tileMovement);
+        treeView = new TreeView(treeRegion, groundLayer, treeModel.tile());
+
+        input = new InputHandler(new GdxKeyQuery())
+                .map(Direction.UP, UP, W)
+                .map(Direction.LEFT, LEFT, A)
+                .map(Direction.DOWN, DOWN, S)
+                .map(Direction.RIGHT, RIGHT, D)
+                .priority(Direction.UP, Direction.LEFT, Direction.DOWN, Direction.RIGHT);
     }
 
     @Override
@@ -75,56 +84,23 @@ public class GameDesktopLauncher implements ApplicationListener {
         Gdx.gl.glClearColor(0f, 0f, 0.2f, 1f);
         Gdx.gl.glClear(GL_COLOR_BUFFER_BIT);
 
-        float deltaTime = Gdx.graphics.getDeltaTime();
+        float dt = Gdx.graphics.getDeltaTime();
 
-        if (Gdx.input.isKeyPressed(UP) || Gdx.input.isKeyPressed(W)) {
-            if (isEqual(playerMovementProgress, 1f)) {
-                if (!treeObstacleCoordinates.equals(incrementedY(playerCoordinates))) {
-                    playerDestinationCoordinates.y++;
-                    playerMovementProgress = 0f;
+        if (!tankModel.isMoving()) {
+            Optional<Direction> dir = input.pollDirection();
+            dir.ifPresent(d -> {
+                if (tankModel.tryStartStep(d, worldModel)) {
+                    tankView.startAnimation();
                 }
-                playerRotation = 90f;
-            }
-        }
-        if (Gdx.input.isKeyPressed(LEFT) || Gdx.input.isKeyPressed(A)) {
-            if (isEqual(playerMovementProgress, 1f)) {
-                if (!treeObstacleCoordinates.equals(decrementedX(playerCoordinates))) {
-                    playerDestinationCoordinates.x--;
-                    playerMovementProgress = 0f;
-                }
-                playerRotation = -180f;
-            }
-        }
-        if (Gdx.input.isKeyPressed(DOWN) || Gdx.input.isKeyPressed(S)) {
-            if (isEqual(playerMovementProgress, 1f)) {
-                if (!treeObstacleCoordinates.equals(decrementedY(playerCoordinates))) {
-                    playerDestinationCoordinates.y--;
-                    playerMovementProgress = 0f;
-                }
-                playerRotation = -90f;
-            }
-        }
-        if (Gdx.input.isKeyPressed(RIGHT) || Gdx.input.isKeyPressed(D)) {
-            if (isEqual(playerMovementProgress, 1f)) {
-                if (!treeObstacleCoordinates.equals(incrementedX(playerCoordinates))) {
-                    playerDestinationCoordinates.x++;
-                    playerMovementProgress = 0f;
-                }
-                playerRotation = 0f;
-            }
+            });
         }
 
-        tileMovement.moveRectangleBetweenTileCenters(playerRectangle, playerCoordinates, playerDestinationCoordinates, playerMovementProgress);
+        tankView.update(dt / MOVE_SPEED_SECONDS);
 
-        playerMovementProgress = continueProgress(playerMovementProgress, deltaTime, MOVEMENT_SPEED);
-        if (isEqual(playerMovementProgress, 1f)) {
-            playerCoordinates.set(playerDestinationCoordinates);
-        }
-        levelRenderer.render();
+        mapRenderer.render();
         batch.begin();
-        drawTextureRegionUnscaled(batch, playerGraphics, playerRectangle, playerRotation);
-        drawTextureRegionUnscaled(batch, treeObstacleGraphics, treeObstacleRectangle, 0f);
-
+        treeView.render(batch);
+        tankView.render(batch);
         batch.end();
     }
 
@@ -139,15 +115,15 @@ public class GameDesktopLauncher implements ApplicationListener {
 
     @Override
     public void dispose() {
-        greenTreeTexture.dispose();
-        blueTankTexture.dispose();
-        level.dispose();
+        tankTexture.dispose();
+        treeTexture.dispose();
+        map.dispose();
         batch.dispose();
     }
 
     public static void main(String[] args) {
-        Lwjgl3ApplicationConfiguration config = new Lwjgl3ApplicationConfiguration();
-        config.setWindowedMode(1280, 1024);
-        new Lwjgl3Application(new GameDesktopLauncher(), config);
+        Lwjgl3ApplicationConfiguration cfg = new Lwjgl3ApplicationConfiguration();
+        cfg.setWindowedMode(1280, 1024);
+        new Lwjgl3Application(new GameDesktopLauncher(), cfg);
     }
 }

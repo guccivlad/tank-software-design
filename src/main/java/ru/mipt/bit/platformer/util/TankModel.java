@@ -11,7 +11,7 @@ public class TankModel extends EntityModel {
         this.destination.set(start);
     }
 
-    public boolean tryStartStep(Direction dir, WorldModel world) {
+    public boolean tryStartStep(Direction dir, World world) {
         if (moving) {
             return false;
         }

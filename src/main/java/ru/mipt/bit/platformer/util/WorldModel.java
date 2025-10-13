@@ -7,7 +7,7 @@ import java.util.Set;
 
 import java.util.Objects;
 
-public class WorldModel {
+public class WorldModel implements World {
     private final int width;
     private final int height;
     private final Set<GridPoint2> blocked = new HashSet<>();

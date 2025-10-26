@@ -12,7 +12,6 @@ import com.badlogic.gdx.maps.MapRenderer;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
 import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
-import com.badlogic.gdx.math.GridPoint2;
 import com.badlogic.gdx.math.Interpolation;
 import ru.mipt.bit.platformer.input.GdxKeyQuery;
 import ru.mipt.bit.platformer.input.InputHandler;
@@ -21,7 +20,10 @@ import ru.mipt.bit.platformer.util.TileMovement;
 import ru.mipt.bit.platformer.view.TankView;
 import ru.mipt.bit.platformer.view.TreeView;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 
 import static com.badlogic.gdx.Input.Keys.*;
 import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
@@ -38,12 +40,12 @@ public class GameDesktopLauncher implements ApplicationListener {
 
     private WorldModel worldModel;
     private TankModel tankModel;
-    private TreeModel treeModel;
+    private List<TreeModel> treeModel;
 
     private Texture tankTexture, treeTexture;
     private TextureRegion tankRegion, treeRegion;
     private TankView tankView;
-    private TreeView treeView;
+    private List<TreeView> treeView;
     private TileMovement tileMovement;
 
     private InputHandler input;
@@ -58,10 +60,16 @@ public class GameDesktopLauncher implements ApplicationListener {
         tileMovement = new TileMovement(groundLayer, Interpolation.smooth);
 
         worldModel = new WorldModel(groundLayer.getWidth(), groundLayer.getHeight());
+        LevelData levelData;
+        if (Gdx.files.internal("level.txt").exists()) {
+            String fileContent = Gdx.files.internal("level.txt").readString();
+            levelData = LevelGenerator.levelFromFile(worldModel, fileContent);
+        } else {
+            levelData = LevelGenerator.generateRandomLevel(worldModel, 5, new Random());
+        }
 
-        tankModel = new TankModel(new GridPoint2(1, 1));
-        treeModel = new TreeModel(new GridPoint2(1, 3));
-        worldModel.addBlocking(treeModel.tile());
+        tankModel = levelData.tank;
+        treeModel = levelData.trees;
 
         tankTexture = new Texture("images/tank_blue.png");
         treeTexture = new Texture("images/greenTree.png");
@@ -69,7 +77,10 @@ public class GameDesktopLauncher implements ApplicationListener {
         treeRegion = new TextureRegion(treeTexture);
 
         tankView = new TankView(tankModel, tankRegion, tileMovement);
-        treeView = new TreeView(treeRegion, groundLayer, treeModel.tile());
+        treeView = new ArrayList<>();
+        for (TreeModel m : treeModel) {
+            treeView.add(new TreeView(treeRegion, groundLayer, m.tile()));
+        }
 
         input = new InputHandler(new GdxKeyQuery())
                 .map(Direction.UP, UP, W)
@@ -99,7 +110,9 @@ public class GameDesktopLauncher implements ApplicationListener {
 
         mapRenderer.render();
         batch.begin();
-        treeView.render(batch);
+        for (TreeView tv : treeView) {
+            tv.render(batch);
+        }
         tankView.render(batch);
         batch.end();
     }

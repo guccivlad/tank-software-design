@@ -17,11 +17,11 @@ public class WorldModel implements World {
         this.height = height;
     }
 
-    public int width() {
+    public int getWidth() {
         return width;
     }
 
-    public int height() {
+    public int getHeight() {
         return height;
     }
 

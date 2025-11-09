@@ -24,6 +24,10 @@ public class TankView {
         movement.moveRectangleBetweenTileCenters(bounds, model.tile(), model.tile(), 1f);
     }
 
+    public Rectangle getRenderBounds() {
+        return new Rectangle(bounds);
+    }
+
     public void update(float deltaProgress) {
         if (model.isMoving()) {
             progress = Math.min(1f, progress + deltaProgress);

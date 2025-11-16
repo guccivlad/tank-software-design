@@ -1,6 +1,7 @@
 package ru.mipt.bit.platformer.aibot;
 
 import ru.mipt.bit.platformer.command.MoveCommand;
+import ru.mipt.bit.platformer.command.ShootCommand;
 import ru.mipt.bit.platformer.util.Direction;
 import ru.mipt.bit.platformer.util.TankModel;
 import ru.mipt.bit.platformer.util.World;
@@ -19,6 +20,11 @@ public class TankBot {
 
     public void update(World world, float dt) {
         timer += dt;
+
+        if (random.nextFloat() < 0.10f) {
+            new ShootCommand(tank).execute(world);
+        }
+
         if (timer < movePeriodSec) {
             return;
         }
@@ -30,10 +36,6 @@ public class TankBot {
         Direction[] directions = Direction.values();
         Direction direction = directions[random.nextInt(directions.length)];
         boolean started = new MoveCommand(tank, direction).execute(world);
-        if (started) {
-            timer = 0f;
-        } else {
-            timer = movePeriodSec;
-        }
+        timer = started ? 0f : movePeriodSec;
     }
 }

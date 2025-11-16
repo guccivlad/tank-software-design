@@ -18,6 +18,7 @@ import com.badlogic.gdx.math.Interpolation;
 import ru.mipt.bit.platformer.aibot.TankBot;
 import ru.mipt.bit.platformer.command.HealthBarCommand;
 import ru.mipt.bit.platformer.command.MoveCommand;
+import ru.mipt.bit.platformer.command.ShootCommand;
 import ru.mipt.bit.platformer.input.GdxKeyQuery;
 import ru.mipt.bit.platformer.input.InputHandler;
 import ru.mipt.bit.platformer.util.*;
@@ -25,10 +26,8 @@ import ru.mipt.bit.platformer.util.TileMovement;
 import ru.mipt.bit.platformer.view.TankView;
 import ru.mipt.bit.platformer.view.TreeView;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-import java.util.Random;
+import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.badlogic.gdx.Input.Keys.*;
 import static com.badlogic.gdx.graphics.GL20.GL_COLOR_BUFFER_BIT;
@@ -51,8 +50,14 @@ public class GameDesktopLauncher implements ApplicationListener {
     private final List<TankBot> bots = new ArrayList<>();
     private final List<TankView> botViews = new ArrayList<>();
 
+    private final Map<BulletModel, BulletView> bulletViews = new HashMap<>();
+    private TextureRegion bulletRegion;
+
     private ShapeRenderer shapes;
     private final List<HealthBarTankViewDecorator> healthViews = new ArrayList<>();
+
+    private final Map<TankModel, TankView> botViewByTank = new HashMap<>();
+    private final Map<TankModel, HealthBarTankViewDecorator> hpViewByTank = new HashMap<>();
 
     private Texture tankTexture, treeTexture;
     private TextureRegion tankRegion, treeRegion;
@@ -89,9 +94,12 @@ public class GameDesktopLauncher implements ApplicationListener {
         treeTexture = new Texture("images/greenTree.png");
         tankRegion = new TextureRegion(tankTexture);
         treeRegion = new TextureRegion(treeTexture);
+        bulletRegion = new TextureRegion(tankTexture, 0, 0, 16, 16);
 
         tankView = new TankView(tankModel, tankRegion, tileMovement);
-        healthViews.add(new HealthBarTankViewDecorator(tankView, tankModel));
+        HealthBarTankViewDecorator playerHp = new HealthBarTankViewDecorator(tankView, tankModel);
+        healthViews.add(playerHp);
+        hpViewByTank.put(tankModel, playerHp);
         for (int i = 0; i < BOTS_COUNT; i++) {
             GridPoint2 spawn = worldModel.randomFreeCell(random);
             if(spawn == null) {
@@ -116,6 +124,31 @@ public class GameDesktopLauncher implements ApplicationListener {
                 .map(Direction.DOWN, DOWN, S)
                 .map(Direction.RIGHT, RIGHT, D)
                 .priority(Direction.UP, Direction.LEFT, Direction.DOWN, Direction.RIGHT);
+
+        worldModel.addListener(new WorldListener() {
+            @Override
+            public void onBulletAdded(BulletModel bullet) {
+                BulletView view = new BulletView(bulletRegion, groundLayer, bullet);
+                bulletViews.put(bullet, view);
+            }
+
+            @Override
+            public void onBulletRemoved(BulletModel bullet) {
+                bulletViews.remove(bullet);
+            }
+
+            @Override
+            public void onTankRemoved(TankModel tank) {
+                HealthBarTankViewDecorator hp = hpViewByTank.remove(tank);
+                if (hp != null) {
+                    healthViews.remove(hp);
+                }
+                TankView botView = botViewByTank.remove(tank);
+                if (botView != null) {
+                    botViews.remove(botView);
+                }
+            }
+        });
     }
 
     @Override
@@ -139,9 +172,15 @@ public class GameDesktopLauncher implements ApplicationListener {
             });
         }
 
+        if (Gdx.input.isKeyJustPressed(SPACE)) {
+            new ShootCommand(tankModel).execute(worldModel);
+        }
+
         for (TankBot bot : bots) {
             bot.update(worldModel, dt);
         }
+
+        worldModel.live(dt);
 
         tankView.update(dt / MOVE_SPEED_SECONDS);
         for (TankView botView : botViews) {
@@ -158,6 +197,10 @@ public class GameDesktopLauncher implements ApplicationListener {
             botView.render(batch);
         }
         tankView.render(batch);
+        for (BulletView bulletView : bulletViews.values()) {
+            bulletView.sync(groundLayer);
+            bulletView.render(batch);
+        }
         batch.end();
 
         for (HealthBarTankViewDecorator healthView : healthViews) {

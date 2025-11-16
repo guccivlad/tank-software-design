@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.maps.MapRenderer;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.TmxMapLoader;
@@ -15,6 +16,7 @@ import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.math.GridPoint2;
 import com.badlogic.gdx.math.Interpolation;
 import ru.mipt.bit.platformer.aibot.TankBot;
+import ru.mipt.bit.platformer.command.HealthBarCommand;
 import ru.mipt.bit.platformer.command.MoveCommand;
 import ru.mipt.bit.platformer.input.GdxKeyQuery;
 import ru.mipt.bit.platformer.input.InputHandler;
@@ -49,6 +51,9 @@ public class GameDesktopLauncher implements ApplicationListener {
     private final List<TankBot> bots = new ArrayList<>();
     private final List<TankView> botViews = new ArrayList<>();
 
+    private ShapeRenderer shapes;
+    private final List<HealthBarTankViewDecorator> healthViews = new ArrayList<>();
+
     private Texture tankTexture, treeTexture;
     private TextureRegion tankRegion, treeRegion;
     private TankView tankView;
@@ -60,6 +65,7 @@ public class GameDesktopLauncher implements ApplicationListener {
     @Override
     public void create() {
         batch = new SpriteBatch();
+        shapes = new ShapeRenderer();
 
         map = new TmxMapLoader().load("level.tmx");
         mapRenderer = createSingleLayerMapRenderer(map, batch);
@@ -85,17 +91,19 @@ public class GameDesktopLauncher implements ApplicationListener {
         treeRegion = new TextureRegion(treeTexture);
 
         tankView = new TankView(tankModel, tankRegion, tileMovement);
+        healthViews.add(new HealthBarTankViewDecorator(tankView, tankModel));
         for (int i = 0; i < BOTS_COUNT; i++) {
             GridPoint2 spawn = worldModel.randomFreeCell(random);
             if(spawn == null) {
-                Gdx.app.log("Bots", "No free cell found on attempt " + i);
                 continue;
             }
             TankModel botTank = new TankModel(spawn);
 
             worldModel.addTank(botTank);
             bots.add(new TankBot(botTank));
-            botViews.add(new TankView(botTank, tankRegion, tileMovement));
+            TankView botView = new TankView(botTank, tankRegion, tileMovement);
+            botViews.add(botView);
+            healthViews.add(new HealthBarTankViewDecorator(botView, botTank));
         }
         treeView = new ArrayList<>();
         for (TreeModel m : treeModel) {
@@ -116,6 +124,10 @@ public class GameDesktopLauncher implements ApplicationListener {
         Gdx.gl.glClear(GL_COLOR_BUFFER_BIT);
 
         float dt = Gdx.graphics.getDeltaTime();
+
+        if (Gdx.input.isKeyJustPressed(L)) {
+            new HealthBarCommand().execute(worldModel);
+        }
 
         if (!tankModel.isMoving()) {
             Optional<Direction> dir = input.pollDirection();
@@ -147,6 +159,10 @@ public class GameDesktopLauncher implements ApplicationListener {
         }
         tankView.render(batch);
         batch.end();
+
+        for (HealthBarTankViewDecorator healthView : healthViews) {
+            healthView.renderHp(shapes);
+        }
     }
 
     @Override
@@ -164,6 +180,7 @@ public class GameDesktopLauncher implements ApplicationListener {
         treeTexture.dispose();
         map.dispose();
         batch.dispose();
+        shapes.dispose();
     }
 
     public static void main(String[] args) {

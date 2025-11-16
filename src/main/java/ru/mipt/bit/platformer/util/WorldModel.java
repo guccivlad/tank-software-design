@@ -2,17 +2,15 @@ package ru.mipt.bit.platformer.util;
 
 import com.badlogic.gdx.math.GridPoint2;
 
-import java.util.HashSet;
-import java.util.Random;
-import java.util.Set;
-
-import java.util.Objects;
+import java.util.*;
 
 public class WorldModel implements World {
     private final int width;
     private final int height;
     private final Set<GridPoint2> blocked = new HashSet<>();
     private final Set<TankModel> tanks = new HashSet<>();
+    private final Set<BulletModel> bullets = new HashSet<>();
+    private final List<WorldListener> listeners = new ArrayList<>();
 
     public WorldModel(int width, int height) {
         this.width = width;
@@ -31,10 +29,12 @@ public class WorldModel implements World {
         blocked.add(new GridPoint2(Objects.requireNonNull(cell)));
     }
 
+    @Override
     public boolean isInside(GridPoint2 cell) {
         return cell.x >= 0 && cell.x < width && cell.y >= 0 && cell.y < height;
     }
 
+    @Override
     public boolean isBlocked(GridPoint2 cell) {
         return blocked.contains(cell);
     }
@@ -47,9 +47,37 @@ public class WorldModel implements World {
         tanks.add(t);
     }
 
-    public void removeTank(TankModel t) {
-        tanks.remove(t);
+    @Override
+    public void removeTank(TankModel tank) {
+//        tanks.remove(t);
+        if (tank == null) {
+            return;
+        }
+        if (tanks.remove(tank)) {
+            for (WorldListener listener : new ArrayList<>(listeners)) {
+                listener.onTankRemoved(tank);
+            }
+        }
     }
+
+    public void addBullet(BulletModel b) {
+        bullets.add(b);
+        for (WorldListener listener : listeners) {
+            listener.onBulletAdded(b);
+        }
+    }
+
+    public void removeBullet(BulletModel b) {
+        if (bullets.remove(b)) {
+            for (WorldListener listener : listeners) {
+                listener.onBulletRemoved(b);
+            }
+        }
+    }
+
+    public void addListener(WorldListener listener) { listeners.add(listener); }
+
+    public void removeListener(WorldListener listener) { listeners.remove(listener); }
 
     @Override
     public boolean canStartStep(TankModel tank, Direction dir) {
@@ -87,6 +115,22 @@ public class WorldModel implements World {
         return true;
     }
 
+    @Override
+    public TankModel findTankAt(GridPoint2 cell) {
+        for (TankModel tank : tanks) {
+            if (!tank.isAlive()) {
+                continue;
+            }
+            if (tank.tile().equals(cell)) {
+                return tank;
+            }
+            if (tank.isMoving() && tank.destination().equals(cell)) {
+                return tank;
+            }
+        }
+        return null;
+    }
+
     public GridPoint2 randomFreeCell(Random random) {
         int x = random.nextInt(width);
         int y = random.nextInt(height);
@@ -103,5 +147,11 @@ public class WorldModel implements World {
         }
 
         return point;
+    }
+
+    public void live(float tickSeconds) {
+        for (BulletModel bullet : new ArrayList<>(bullets)) {
+            bullet.live(this, tickSeconds);
+        }
     }
 }

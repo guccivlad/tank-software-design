@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public class InputHandler {
     private final Map<Direction, int[]> mapping = new EnumMap<>(Direction.class);
+    private int shootKey;
     private final KeyQuery keyQuery;
     private Direction[] priority = {
             Direction.UP,
@@ -24,6 +25,27 @@ public class InputHandler {
         mapping.put(dir, keys);
 
         return this;
+    }
+
+    public void mapShoot(int key) {
+        this.shootKey = key;
+    }
+
+    public boolean isShootPressed() {
+        return shootKey != 0 && keyQuery.isPressed(shootKey);
+    }
+
+    public Optional<Direction> readDirection() {
+        for (Direction dir : priority) {
+            int[] keys = mapping.get(dir);
+            if (keys == null) continue;
+            for (int k : keys) {
+                if (keyQuery.isPressed(k)) {
+                    return Optional.of(dir);
+                }
+            }
+        }
+        return Optional.empty();
     }
 
     public InputHandler priority(Direction... order) {
